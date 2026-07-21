@@ -1,6 +1,6 @@
 ### GuardRAG — Secure Document Q&A with RAG + LLM Guardrails
 
-**Personal Project** | July 2025 | Python, FastAPI, LangChain, ChromaDB, React, OpenAI
+**Personal Project** | July 2024 – Present | Python, FastAPI, LangChain, ChromaDB, React, OpenAI
 
 **What it is:** A production-grade RAG (Retrieval-Augmented Generation) system with a 3-layer LLM guardrail architecture that secures document Q&A against prompt injection, data exfiltration, and hallucination. Unlike typical RAG tutorials that skip security entirely, GuardRAG demonstrates how to build enterprise-safe AI applications with observable, configurable safety controls at every stage.
 
@@ -18,4 +18,4 @@
 
 **Impact:** Demonstrates production-grade AI safety architecture that most RAG implementations ignore. The 3-layer guardrail design (input → retrieval → output) provides defense in depth for enterprise LLM deployments, with each layer independently configurable and fully auditable. This project complements mcp-opsmate in showcasing full-stack AI engineering capabilities from infrastructure automation to secure LLM application development.
 
-**Links:** GitHub: https://github.com/Freakycobra/guardrag
+**Links:** GitHub: https://github.com/jashwanthnagveepuri/guardrag
