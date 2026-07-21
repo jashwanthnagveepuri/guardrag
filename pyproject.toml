@@ -1,0 +1,60 @@
+[tool.poetry]
+name = "guardrag"
+version = "1.0.0"
+description = "Secure Document Q&A System with RAG + LLM Guardrails"
+authors = ["GuardRAG Team"]
+readme = "README.md"
+packages = [{ include = "guardrag" }]
+
+[tool.poetry.dependencies]
+python = "^3.13"
+fastapi = "^0.115.0"
+uvicorn = { extras = ["standard"], version = "^0.34.0" }
+pydantic = "^2.10.0"
+pydantic-settings = "^2.7.0"
+python-multipart = "^0.0.20"
+sqlalchemy = { extras = ["asyncio"], version = "^2.0.36" }
+asyncpg = "^0.30.0"
+alembic = "^1.14.0"
+langchain = "^0.3.0"
+langchain-openai = "^0.3.0"
+langchain-chroma = "^0.2.0"
+chromadb = "^0.6.0"
+sentence-transformers = "^3.3.0"
+openai = "^1.59.0"
+tiktoken = "^0.8.0"
+pypdf = "^5.1.0"
+unstructured = { extras = ["all-docs"], version = "^0.16.0" }
+python-docx = "^1.1.0"
+httpx = "^0.28.0"
+redis = "^5.2.0"
+prometheus-client = "^0.21.0"
+structlog = "^24.4.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.0"
+pytest-asyncio = "^0.25.0"
+pytest-cov = "^6.0.0"
+faker = "^33.0.0"
+factory-boy = "^3.3.0"
+
+[tool.poetry.scripts]
+guardrag = "guardrag.api.main:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["guardrag"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true

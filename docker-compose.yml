@@ -1,0 +1,208 @@
+version: "3.8"
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — Document metadata, conversations, guardrail audit logs
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: guardrag-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: guardrag
+      POSTGRES_PASSWORD: guardrag
+      POSTGRES_DB: guardrag
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    networks:
+      - guardrag_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U guardrag -d guardrag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # ChromaDB — Vector database for document embeddings
+  # ---------------------------------------------------------------------------
+  chromadb:
+    image: chromadb/chroma:0.6.0
+    container_name: guardrag-chromadb
+    restart: unless-stopped
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+    volumes:
+      - chroma_data:/chroma/chroma
+    ports:
+      - "8001:8000"
+    networks:
+      - guardrag_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # Redis — Caching and session storage
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: guardrag-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - guardrag_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # ---------------------------------------------------------------------------
+  # GuardRAG API — FastAPI backend
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: guardrag-api
+    restart: unless-stopped
+    environment:
+      GUARDRAG_APP_ENV: production
+      GUARDRAG_APP_DEBUG: "false"
+      GUARDRAG_API_HOST: 0.0.0.0
+      GUARDRAG_API_PORT: 8000
+      GUARDRAG_API_WORKERS: 2
+      GUARDRAG_DATABASE_URL: postgresql+asyncpg://guardrag:guardrag@postgres:5432/guardrag
+      GUARDRAG_CHROMADB_HOST: chromadb
+      GUARDRAG_CHROMADB_PORT: 8000
+      GUARDRAG_CHROMADB_COLLECTION_NAME: guardrag_chunks
+      GUARDRAG_OPENAI_API_KEY: ${GUARDRAG_OPENAI_API_KEY}
+      GUARDRAG_OPENAI_MODEL: gpt-4o
+      GUARDRAG_OPENAI_EMBEDDING_MODEL: text-embedding-3-large
+      GUARDRAG_OPENAI_TEMPERATURE: 0.1
+      GUARDRAG_CHUNKING_CHUNK_SIZE: 512
+      GUARDRAG_CHUNKING_CHUNK_OVERLAP: 50
+      GUARDRAG_CHUNKING_STRATEGY: recursive
+      GUARDRAG_RETRIEVAL_TOP_K: 5
+      GUARDRAG_RETRIEVAL_MMR_FETCH_K: 20
+      GUARDRAG_RETRIEVAL_MMR_LAMBDA: 0.5
+      GUARDRAG_RETRIEVAL_RERANK_TOP_K: 3
+      GUARDRAG_GUARDRAIL_INPUT_THRESHOLD: 0.75
+      GUARDRAG_GUARDRAIL_OUTPUT_THRESHOLD: 0.5
+      GUARDRAG_UPLOAD_MAX_FILE_SIZE: 52428800
+      GUARDRAG_UPLOAD_ALLOWED_TYPES: "application/pdf,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      GUARDRAG_REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    networks:
+      - guardrag_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # ---------------------------------------------------------------------------
+  # GuardRAG Web — React 18 frontend served by nginx
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: guardrag-web
+    restart: unless-stopped
+    networks:
+      - guardrag_network
+    depends_on:
+      - api
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  # ---------------------------------------------------------------------------
+  # Nginx — Reverse proxy and static file server
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: guardrag-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - guardrag_network
+    depends_on:
+      - api
+      - web
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
+    driver: local
+  chroma_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  guardrag_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
